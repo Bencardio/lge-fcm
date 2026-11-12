@@ -542,8 +542,8 @@
   const AIDES = {
     nav: "Glissez pour déplacer l'image. Flèches haut et bas : coupe suivante ou précédente.",
     rv: "Cliquez sur le point d'insertion antérieur du VD. Il oriente les segments AHA.",
-    points: "Cliquez pour poser les points. Sur un contour déjà fermé, chaque clic ajoute un point sur le segment le plus proche. Glissez un point pour le déplacer, clic droit ou Alt + clic pour le supprimer.",
-    cercle: "Cliquez au centre du VG puis glissez jusqu'au bord : le cercle remplace le contour. Passez ensuite en mode Points pour l'ajuster.",
+    points: "Cliquez pour poser les points. Sur un contour déjà fermé, chaque clic ajoute un point sur le segment le plus proche. Glissez un point pour le déplacer, clic droit ou Alt + clic pour le supprimer. Maj + glisser déplace tout le contour, Maj + flèches le décale d'un demi-pixel.",
+    cercle: "Hors du contour : cliquez au centre du VG et glissez jusqu'au bord pour tracer le cercle. Dans le contour : glissez pour le déplacer en entier. Sur son bord : glissez pour l'agrandir ou le réduire. Maj + flèches : décalage fin d'un demi-pixel.",
     libre: "Dessinez le contour en maintenant le bouton enfoncé. Pour retoucher une partie seulement, partez du contour existant et revenez-y : seul le morceau entre les deux est remplacé.",
   };
   const cp = (a) => (a ? a.map((x) => [...x]) : null);
@@ -563,6 +563,14 @@
   }
   function posCanvas(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * W / r.height]; }
   function distSeg(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy; let t = l ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); }
+  function dedans(q, poly) {
+    let ins = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > q[1]) !== (yj > q[1]) && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) ins = !ins;
+    }
+    return ins;
+  }
   const cercle = (c, r, n = 48) => Array.from({ length: n }, (_, k) => [c[0] + r * Math.cos(2 * Math.PI * k / n), c[1] - r * Math.sin(2 * Math.PI * k / n)]);
 
   /* annuler : instantané de tous les contours du patient avant chaque modification */
@@ -617,6 +625,14 @@
     let proche = -1, dmin = 9;
     pts.forEach((p, k) => { const [X, Y] = versEcran(v, p[0], p[1]); const dd = Math.hypot(X - P[0], Y - P[1]); if (dd < dmin) { dmin = dd; proche = k; } });
     if (e.button === 2 || e.altKey) { if (proche >= 0) { pts.splice(proche, 1); s[V.tool] = pts; modifie(); } else ETAT.ouvert.pile.pop(); return; }
+    const ferme = pts.length >= 3;
+    if (ferme && (e.shiftKey || V.mode === "cercle")) {
+      const g = geom(pts);
+      let dBord = Infinity; const ecr = pts.map((p) => versEcran(v, p[0], p[1]));
+      for (let k = 0; k < ecr.length; k++) dBord = Math.min(dBord, distSeg(P, ecr[k], ecr[(k + 1) % ecr.length]));
+      if (V.mode === "cercle" && !e.shiftKey && dBord < 8) { V.drag = { type: "echelle", depart: cp(pts), c: g.c, r0: Math.max(0.5, Math.hypot(I[0] - g.c[0], I[1] - g.c[1])) }; return; }
+      if (e.shiftKey || dedans(I, pts)) { V.drag = { type: "deplacer", depart: cp(pts), I0: I }; return; }
+    }
     if (V.mode === "cercle") { V.drag = { type: "cercle", c: I }; return; }
     if (V.mode === "libre") { V.drag = { type: "libre", pts: [I] }; return; }
     s[V.tool] = pts;
@@ -637,6 +653,8 @@
     if (V.drag.type === "pan") { V.centre = [V.drag.centre[0] - (P[0] - V.drag.P[0]) / v.echelle, V.drag.centre[1] - (P[1] - V.drag.P[1]) / v.echelle]; dessiner(); return; }
     if (V.drag.type === "cercle") { const r = Math.hypot(I[0] - V.drag.c[0], I[1] - V.drag.c[1]); if (r > 0.5) s[V.tool] = cercle(V.drag.c, r); dessiner(); return; }
     if (V.drag.type === "libre") { V.drag.pts.push(I); dessiner(); return; }
+    if (V.drag.type === "deplacer") { const dx = I[0] - V.drag.I0[0], dy = I[1] - V.drag.I0[1]; s[V.tool] = V.drag.depart.map((q) => [q[0] + dx, q[1] + dy]); dessiner(); return; }
+    if (V.drag.type === "echelle") { const f = Math.max(0.05, Math.hypot(I[0] - V.drag.c[0], I[1] - V.drag.c[1]) / V.drag.r0); s[V.tool] = V.drag.depart.map((q) => [V.drag.c[0] + (q[0] - V.drag.c[0]) * f, V.drag.c[1] + (q[1] - V.drag.c[1]) * f]); dessiner(); return; }
     s[V.tool][V.drag.k] = I; dessiner();
   });
   const finDrag = () => {
@@ -696,6 +714,13 @@
     if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
     const sl = (ETAT.ouvert && ETAT.ouvert.slices) || []; if (!sl.length) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); annuler(); return; }
+    const s0 = courante();
+    if (e.shiftKey && e.key.startsWith("Arrow") && CONTOURS_POLY.includes(V.tool) && s0 && s0[V.tool] && s0[V.tool].length) {
+      e.preventDefault();
+      const d = { ArrowLeft: [-0.5, 0], ArrowRight: [0.5, 0], ArrowUp: [0, -0.5], ArrowDown: [0, 0.5] }[e.key];
+      if (!e.repeat) instantane();
+      s0[V.tool] = s0[V.tool].map((q) => [q[0] + d[0], q[1] + d[1]]); modifie(); return;
+    }
     if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); V.cur = Math.max(0, Math.min(sl.length - 1, V.cur + (e.key === "ArrowUp" ? -1 : 1))); majBandeau(); dessiner(); }
   });
 

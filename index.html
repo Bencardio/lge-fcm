@@ -296,6 +296,7 @@ label.field select.serie-sel { min-width: 0; max-width: 520px; }
               <label class="field">Contraste<input id="contraste" type="range" min="40" max="200" value="100"></label>
             </div>
             <label class="check"><input id="show-contours" type="checkbox" checked> Afficher les contours</label>
+            <button class="btn small" id="b-recentrer" style="width:fit-content">Recentrer l'image sur le VG</button>
           </div>
         </div>
       </div>
@@ -1124,6 +1125,8 @@ if (typeof module !== "undefined") module.exports = LGE;
     if (!centre) {
       const ref = [s, ...ETAT.ouvert.slices].find((x) => x.endo && x.endo.length >= 3);
       centre = V.zoom > 1 && ref ? LGE.centreVG(ref) : [(s.cols - 1) / 2, (s.rows - 1) / 2];
+      // le cadrage est figé : il ne suit plus les contours pendant qu'on les modifie
+      V.centre = centre;
     }
     return { echelle, cx: centre[0], cy: centre[1] };
   }
@@ -1612,6 +1615,7 @@ if (typeof module !== "undefined") module.exports = LGE;
   $("b-propager").onclick = propager;
   $("overlay").onchange = dessiner;
   $("zoom").onchange = () => { V.zoom = +$("zoom").value; V.centre = null; dessiner(); };
+  $("b-recentrer").onclick = () => { V.centre = null; dessiner(); };
   $("contraste").oninput = () => { V.contraste = +$("contraste").value; dessiner(); };
   $("show-contours").onchange = dessiner;
   $("bull-meth").onchange = afficherResultats;

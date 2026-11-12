@@ -461,6 +461,8 @@
     if (!centre) {
       const ref = [s, ...ETAT.ouvert.slices].find((x) => x.endo && x.endo.length >= 3);
       centre = V.zoom > 1 && ref ? LGE.centreVG(ref) : [(s.cols - 1) / 2, (s.rows - 1) / 2];
+      // le cadrage est figé : il ne suit plus les contours pendant qu'on les modifie
+      V.centre = centre;
     }
     return { echelle, cx: centre[0], cy: centre[1] };
   }
@@ -949,6 +951,7 @@
   $("b-propager").onclick = propager;
   $("overlay").onchange = dessiner;
   $("zoom").onchange = () => { V.zoom = +$("zoom").value; V.centre = null; dessiner(); };
+  $("b-recentrer").onclick = () => { V.centre = null; dessiner(); };
   $("contraste").oninput = () => { V.contraste = +$("contraste").value; dessiner(); };
   $("show-contours").onchange = dessiner;
   $("bull-meth").onchange = afficherResultats;

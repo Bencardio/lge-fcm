@@ -1,0 +1,15 @@
+# Ne jamais versionner de données patients
+*.dcm
+DICOM/
+patients/
+resultats/
+resultats_LGE/
+donnees_test/
+*.xlsx
+*.cvi42wsx
+contours*.json
+__pycache__/
+.env_lge/
+.DS_Store
+web/analyse_lge.html
+web/analyse_lge_autonome.html

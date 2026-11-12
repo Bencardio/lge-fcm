@@ -1,0 +1,328 @@
+<title>Quantification LGE fuzzy c-means</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Mise en page : console de post-traitement IRM. Colonne de réglages à gauche, visionneuse et résultats à droite. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --surface-2: #f6f8fa; --ink: #15202b; --muted: #5a6876; --line: #d6dde4;
+  --accent: #0e6a87; --accent-ink: #ffffff; --lge: #c8361f; --warn-bg: #fff4dc; --warn-ink: #7a4d00;
+  --scan: #05080b; --focus: #2a9fd0;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1318; --surface: #141c23; --surface-2: #19232c; --ink: #e4ebf1; --muted: #93a2b0; --line: #26333f;
+  --accent: #46b2d3; --accent-ink: #061218; --lge: #ff6b52; --warn-bg: #3a2c0c; --warn-ink: #f4cf7a; --scan: #000000; --focus: #6cc8ea;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1318; --surface: #141c23; --surface-2: #19232c; --ink: #e4ebf1; --muted: #93a2b0; --line: #26333f;
+  --accent: #46b2d3; --accent-ink: #061218; --lge: #ff6b52; --warn-bg: #3a2c0c; --warn-ink: #f4cf7a; --scan: #000000; --focus: #6cc8ea;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+p { margin: 0; }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.page { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 24px; }
+.privacy { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.85rem; }
+.privacy b { color: var(--ink); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #2fa66a; flex: none; }
+
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.side { display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 7px 11px; cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.small { padding: 4px 8px; font-size: 0.85rem; }
+label.field { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+label.field input, label.field select { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--ink); width: 100%; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; }
+details.params { border-top: 1px solid var(--line); padding-top: 10px; }
+details.params summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+details.params > div { display: grid; gap: 8px; margin-top: 10px; }
+.hint { font-size: 0.8rem; color: var(--muted); }
+.note { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 8px 10px; font-size: 0.85rem; }
+.status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+.status.err { color: var(--lge); }
+
+.viewer { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .viewer { grid-template-columns: minmax(0, 1fr); } }
+.slices { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.slice { flex: none; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-family: var(--mono); font-size: 0.8rem; display: grid; justify-items: center; gap: 1px; min-width: 44px; }
+.slice small { font-family: var(--sans); font-size: 0.66rem; color: var(--muted); }
+.slice.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slice .st { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.slice .st.ok { background: #2fa66a; }
+.slice .st.part { background: #e0a020; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool { border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 5px 9px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.tool[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--surface)); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; width: fit-content; max-width: 100%; }
+.seg button { border: 0; border-right: 1px solid var(--line); background: var(--surface-2); padding: 5px 10px; cursor: pointer; font-size: 0.85rem; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg[hidden] { display: none; }
+.sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.stage { position: relative; background: var(--scan); border-radius: var(--r); overflow: hidden; aspect-ratio: 1 / 1; width: 100%; max-width: 640px; touch-action: none; }
+.stage canvas { width: 100%; height: 100%; display: block; }
+.stage .empty { pointer-events: none; position: absolute; inset: 0; display: grid; place-items: center; color: #9aa7b3; text-align: center; padding: 24px; font-size: 0.9rem; }
+.stage.drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.78rem; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 5px; }
+
+.headline { display: grid; gap: 2px; }
+.headline .big { font-family: var(--mono); font-size: 1.6rem; font-weight: 500; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; }
+td.n, th.n { text-align: right; }
+tr.hl td { background: color-mix(in oklab, var(--accent) 9%, transparent); }
+.scroll { overflow-x: auto; }
+.bar { height: 6px; border-radius: 3px; background: var(--lge); min-width: 1px; }
+.results { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .results { grid-template-columns: minmax(0, 1fr); } }
+svg.bull { width: 100%; max-width: 300px; height: auto; display: block; margin: 0 auto; }
+svg.bull text { fill: var(--ink); font-family: var(--mono); font-size: 9px; }
+svg.bull path { stroke: var(--ink); stroke-width: 0.8; }
+.toast { margin: 0; border: 0; inset: auto; position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; }
+@media (prefers-reduced-motion: no-preference) { .btn, .tool, .slice { transition: border-color .12s, background .12s; } }
+
+/* --- lot de patients et fenêtre patient --- */
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 8px; font-size: 0.76rem; font-weight: 500; white-space: nowrap; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: #1f8a55; } .chip.todo { color: #b7790f; } .chip.err { color: var(--lge); } .chip.run { color: var(--accent); } .chip.val { color: #1f8a55; background: color-mix(in oklab, #2fa66a 14%, var(--surface)); }
+.progress { height: 6px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); }
+#t-patients tbody tr { cursor: pointer; }
+#t-patients tbody tr:hover td { background: color-mix(in oklab, var(--accent) 7%, transparent); }
+.sub { color: var(--muted); font-size: 0.78rem; }
+dialog#fen { width: min(1320px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--bg); color: var(--ink); }
+dialog#fen::backdrop { background: rgba(8, 14, 20, 0.55); }
+.fen-tete { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); padding: 12px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.fen-corps { padding: 16px max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.82rem; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 500; }
+label.field select.serie-sel { min-width: 0; max-width: 520px; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="headline">
+      <h1>Quantification du rehaussement tardif</h1>
+      <p class="hint">Fuzzy c-means pondéré et défuzzifié, n-SD et FWHM, sur coupes petit axe, en lot</p>
+    </div>
+    <div class="privacy"><span class="dot"></span><span><b>Calcul local.</b> Les images sont lues dans ce navigateur et ne sont envoyées nulle part.</span></div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <section class="panel" aria-labelledby="t-ex">
+        <h2 id="t-ex">Examens</h2>
+        <div class="row">
+          <button class="btn primary" id="b-dossier">Ouvrir un dossier</button>
+          <button class="btn" id="b-fichiers">Fichiers…</button>
+          <input id="in-dossier" type="file" webkitdirectory multiple hidden>
+          <input id="in-fichiers" type="file" multiple hidden>
+        </div>
+        <p class="hint">Choisissez le dossier qui contient tous les examens : chaque examen est reconnu par ses en-têtes DICOM, quel que soit le rangement des sous-dossiers. Les exports cvi42 (.cvi42wsx, .xml) ou contours.json présents sont appliqués automatiquement. Vous pouvez aussi glisser un dossier sur cette page.</p>
+        <div class="row">
+          <button class="btn small" id="b-contours">Charger des contours…</button>
+          <button class="btn small" id="b-exemple">Lot d'exemple fictif</button>
+          <input id="in-contours" type="file" accept=".json,.xml,.cvi42wsx,.cvi42ws" multiple hidden>
+        </div>
+        <div class="progress" id="prog" hidden><i></i></div>
+        <p class="status" id="status"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="t-seq">
+        <h2 id="t-seq">Reconnaissance du LGE</h2>
+        <label class="field">Mots recherchés dans le nom de la séquence
+          <input id="p-mots" type="text" value="LGE, RT, PSIR" autocomplete="off">
+        </label>
+        <p class="hint">Parmi les séquences qui contiennent un de ces mots, l'outil préfère le petit axe avec le plus de coupes. S'il trouve des contours pour une séquence, il prend celle-là.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="t-param">
+        <h2 id="t-param">Paramètres</h2>
+        <details class="params" open>
+          <summary>Fuzzy c-means</summary>
+          <div>
+            <div class="grid2">
+              <label class="field">Classes (c)<select id="p-c"><option>2</option><option>3</option><option>4</option></select></label>
+              <label class="field">Flou (m)<input id="p-m" type="number" min="1.1" max="5" step="0.1" value="2"></label>
+            </div>
+            <label class="field">Classes comptées comme rehaussées<select id="p-cr"><option value="1">la plus brillante</option><option value="2">les 2 plus brillantes</option><option value="3">les 3 plus brillantes</option></select></label>
+            <label class="field">Classification<select id="p-fe"><option value="patient">sur tout le VG du patient</option><option value="coupe">coupe par coupe</option></select></label>
+            <label class="field">Garde-fou (SD au-dessus du myocarde sain, 0 = désactivé)<input id="p-gf" type="number" min="0" max="20" step="0.5" value="0"></label>
+          </div>
+        </details>
+        <details class="params">
+          <summary>n-SD et FWHM</summary>
+          <div>
+            <label class="field">Seuils n-SD (séparés par des virgules)<input id="p-n" type="text" value="2, 3, 5"></label>
+            <label class="field">Myocarde sain de référence<select id="p-rem"><option value="contour">contour tracé (sinon automatique)</option><option value="auto">toujours automatique</option></select></label>
+            <div class="grid2">
+              <label class="field">FWHM fraction<input id="p-ff" type="number" min="0.1" max="0.9" step="0.05" value="0.5"></label>
+              <label class="field">Maximum (percentile)<input id="p-fp" type="number" min="90" max="100" step="0.5" value="100"></label>
+            </div>
+            <label class="field">Maximum FWHM pris<select id="p-fe2"><option value="patient">sur tout le VG du patient</option><option value="coupe">coupe par coupe</option></select></label>
+          </div>
+        </details>
+        <details class="params">
+          <summary>Masse et segments AHA</summary>
+          <div>
+            <div class="grid2">
+              <label class="field">Densité (g/mL)<input id="p-d" type="number" min="1" max="1.2" step="0.01" value="1.05"></label>
+              <label class="field">Épaisseur de tranche<select id="p-ep"><option value="auto">auto</option><option value="coupe">coupe</option><option value="intervalle">intervalle</option></select></label>
+            </div>
+            <label class="check"><input id="p-aha" type="checkbox" checked> Calculer les segments AHA</label>
+            <label class="check"><input id="p-inv" type="checkbox"> Numérotation en miroir</label>
+            <label class="field">Segment atteint au-delà de (%)<input id="p-seuil" type="number" min="0" max="100" step="1" value="0"></label>
+          </div>
+        </details>
+        <button class="btn small" id="b-reset">Revenir aux réglages par défaut</button>
+      </section>
+    </aside>
+
+    <main class="side" style="min-width:0">
+      <section class="panel" aria-labelledby="t-pat">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="t-pat">Patients</h2>
+          <div class="row">
+            <label class="check"><input id="anonyme" type="checkbox"> Export anonymisé</label>
+            <button class="btn small" id="b-save-contours">Enregistrer tous les contours</button>
+            <button class="btn small primary" id="b-excel">Exporter en Excel</button>
+          </div>
+        </div>
+        <p class="hint" id="resume-lot"></p>
+        <div class="scroll"><table id="t-patients"></table></div>
+        <p class="hint">Cliquez sur un patient pour ouvrir sa fenêtre : vous pouvez y changer de séquence, corriger les contours et valider les mesures pendant que l'analyse des autres patients continue. Rien n'est conservé à la fermeture de la page : exportez en Excel et enregistrez les contours avant de partir.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<dialog id="fen" aria-labelledby="fen-nom">
+  <div class="fen-tete">
+    <div style="display:grid;gap:4px;min-width:0">
+      <div class="row"><h1 id="fen-nom" style="font-size:1.1rem">Patient</h1><span id="fen-statut"></span></div>
+      <div class="meta" id="fen-meta"></div>
+    </div>
+    <div class="row">
+      <button class="btn small" id="b-prec" aria-label="Patient précédent">←</button>
+      <button class="btn small" id="b-suiv" aria-label="Patient suivant">→</button>
+      <button class="btn small" id="b-valider">Valider les mesures</button>
+      <button class="btn small primary" id="b-fermer">Fermer</button>
+    </div>
+  </div>
+  <div class="fen-corps">
+    <section class="panel">
+      <div class="row" style="justify-content:space-between;align-items:end">
+        <label class="field" style="flex:1 1 320px">Séquence analysée
+          <select id="serie" class="serie-sel"></select>
+        </label>
+        <span class="hint" id="slice-info"></span>
+      </div>
+      <p class="status" id="fen-status"></p>
+      <div class="slices" id="slices" role="tablist" aria-label="Coupes"></div>
+      <div class="viewer">
+        <div style="display:grid;gap:10px;min-width:0">
+          <div class="stage" id="stage">
+            <canvas id="cv" width="640" height="640" aria-label="Image IRM de la coupe sélectionnée"></canvas>
+            <div class="empty" id="empty" hidden>Chargement des images…</div>
+          </div>
+          <div class="legend">
+            <span><i class="sw" style="background:#3ecf6e"></i>épicarde</span>
+            <span><i class="sw" style="background:#ff5a5a"></i>endocarde</span>
+            <span><i class="sw" style="background:#4db8ff"></i>myocarde sain de référence</span>
+            <span><i class="sw" style="background:#ffd23f"></i>insertion antérieure du VD</span>
+            <span><i class="sw" style="background:#ff3dbb"></i>zone rehaussée</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:12px;align-content:start;min-width:0">
+          <div style="display:grid;gap:6px">
+            <h2>Outil</h2>
+            <div class="tools" id="tools">
+              <button class="tool" data-tool="nav" aria-pressed="true">Déplacer</button>
+              <button class="tool" data-tool="epi" aria-pressed="false"><i class="sw" style="background:#3ecf6e"></i>Épicarde</button>
+              <button class="tool" data-tool="endo" aria-pressed="false"><i class="sw" style="background:#ff5a5a"></i>Endocarde</button>
+              <button class="tool" data-tool="remote" aria-pressed="false"><i class="sw" style="background:#4db8ff"></i>Myocarde sain</button>
+              <button class="tool" data-tool="rv" aria-pressed="false"><i class="sw" style="background:#ffd23f"></i>Insertion VD</button>
+            </div>
+            <div class="seg" id="modes" role="group" aria-label="Mode de tracé">
+              <button data-mode="points" aria-pressed="true">Points</button>
+              <button data-mode="cercle" aria-pressed="false">Cercle</button>
+              <button data-mode="libre" aria-pressed="false">Main levée</button>
+            </div>
+            <p class="hint" id="tool-hint"></p>
+            <div class="row">
+              <button class="btn small" id="b-annuler" title="Cmd+Z ou Ctrl+Z">Annuler</button>
+              <button class="btn small" id="b-effacer">Effacer ce contour</button>
+              <button class="btn small" id="b-copier">Copier la coupe précédente</button>
+            </div>
+            <div style="display:grid;gap:6px;border-top:1px solid var(--line);padding-top:10px">
+              <label class="field" id="lbl-prop">Propager les contours de cette coupe
+                <select id="prop-cible">
+                  <option value="vides">aux coupes qui n'en ont pas</option>
+                  <option value="voisines">aux deux coupes voisines</option>
+                  <option value="toutes">à toutes les autres coupes</option>
+                </select>
+              </label>
+              <button class="btn small" id="b-propager">Propager</button>
+            </div>
+          </div>
+          <div style="display:grid;gap:6px">
+            <h2>Affichage</h2>
+            <label class="field">Superposition<select id="overlay"></select></label>
+            <div class="grid2">
+              <label class="field">Zoom<select id="zoom"><option value="1">1×</option><option value="1.5">1,5×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
+              <label class="field">Contraste<input id="contraste" type="range" min="40" max="200" value="100"></label>
+            </div>
+            <label class="check"><input id="show-contours" type="checkbox" checked> Afficher les contours</label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="t-res">
+      <h2 id="t-res">Mesures</h2>
+      <div id="warn"></div>
+      <div class="results">
+        <div style="display:grid;gap:10px;min-width:0">
+          <div class="row" style="gap:24px">
+            <div><p class="hint">Masse du VG</p><p class="num" style="font-size:1.4rem" id="r-vg">–</p></div>
+            <div><p class="hint">Coupes analysées</p><p class="num" style="font-size:1.4rem" id="r-nc">–</p></div>
+            <div><p class="hint">Centres FCM</p><p class="num" style="font-size:1rem;padding-top:6px" id="r-cent">–</p></div>
+          </div>
+          <div class="scroll"><table id="t-meth"></table></div>
+        </div>
+        <div style="display:grid;gap:8px;align-content:start;min-width:0">
+          <label class="field">Œil de bœuf AHA, % de LGE par segment<select id="bull-meth"></select></label>
+          <div id="bull"></div>
+        </div>
+      </div>
+      <details class="params">
+        <summary>Détail par coupe</summary>
+        <div class="scroll"><table id="t-coupes"></table></div>
+      </details>
+    </section>
+  </div>
+</dialog>
+<div class="toast" id="toast" popover="manual"></div>
